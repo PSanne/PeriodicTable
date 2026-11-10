@@ -180,6 +180,10 @@ button.btn[aria-pressed="true"] { background: var(--text); color: var(--bg); }
   width: min(880px, 100%); height: min(90vh, 760px);
   perspective: 1600px;
 }
+/* Eingebettet (iframe): Overlay folgt dem sichtbaren Ausschnitt der Elternseite */
+.embedded .overlay { position: absolute; inset: auto 0 auto 0; top: var(--vis-top, 0px); height: var(--vis-h, 100vh); }
+.embedded .card { height: min(calc(var(--vis-h, 100vh) - 32px), 760px); min-height: 320px; }
+body.embedded { position: relative; }
 .card-inner {
   position: relative; width: 100%; height: 100%;
   transform-style: preserve-3d;
@@ -849,6 +853,28 @@ try { savedTheme = localStorage.getItem("pse-theme"); } catch (_) {}
 const urlTheme = new URLSearchParams(location.search).get("theme");
 setTheme(urlTheme || savedTheme || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"));
 updateTemp();
+
+/* Einbettung per iframe (WordPress-Plugin): Höhe an die Elternseite melden,
+   sichtbaren Ausschnitt empfangen, damit die Detailkarte immer im Blick ist. */
+if (window.parent !== window) {
+  document.body.classList.add("embedded");
+  let lastH = 0;
+  const postHeight = () => {
+    const h = Math.ceil(app.getBoundingClientRect().height);
+    if (Math.abs(h - lastH) < 2) return;
+    lastH = h;
+    window.parent.postMessage({ type: "pse-height", height: h }, "*");
+  };
+  new ResizeObserver(postHeight).observe(app);
+  window.addEventListener("load", postHeight);
+  window.addEventListener("message", ev => {
+    if (ev.source !== window.parent || !ev.data || ev.data.type !== "pse-viewport") return;
+    const top = Math.max(0, +ev.data.top || 0), h = Math.max(0, +ev.data.height || 0);
+    if (h < 80) return;
+    document.body.style.setProperty("--vis-top", top + "px");
+    document.body.style.setProperty("--vis-h", h + "px");
+  });
+}
 </script>
 </body>
 </html>
