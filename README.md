@@ -23,3 +23,13 @@ Am einfachsten per `<iframe>` in einem Block „Individuelles HTML“:
 ```
 
 Das iframe hält das Design der App und das deines Themes sauber getrennt.
+
+## WordPress-Plugin (empfohlen)
+Im Ordner `wordpress-plugin/` liegt ein fertiges Plugin:
+
+1. `wordpress-plugin/periodensystem.zip` in WordPress hochladen
+   (Plugins → Installieren → Plugin hochladen) und aktivieren.
+2. Auf einer beliebigen Seite den Shortcode einfügen: `[periodensystem]`
+   - Optional: `[periodensystem hoehe="1000" theme="hell"]` (theme: `hell` oder `dunkel`)
+
+Nach Änderungen an `index.html` mit `wordpress-plugin/build.sh` die ZIP neu bauen.

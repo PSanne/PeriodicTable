@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Periodensystem der Elemente – interaktiv</title>
+<meta name="description" content="Interaktives Periodensystem: Klicke auf ein Element, um Atommodell, Entdecker, Atommasse, Schmelz- und Siedepunkt und wichtige Verbindungen zu sehen.">
+<style>
+/* =========================================================
+   1. Farben & Themes
+   ========================================================= */
+:root {
+  --radius: 8px;
+  --gap: 4px;
+  --flip: 0.6s;
+}
+[data-theme="dark"] {
+  --bg: #0f1420;
+  --bg2: #171e2e;
+  --panel: #1d2538;
+  --text: #e8ecf4;
+  --muted: #9aa5bd;
+  --border: #2c3650;
+  --shadow: 0 10px 40px rgba(0,0,0,.55);
+  --c-am: #e8575a; --c-ae: #f29b4b; --c-tm: #e9c46a; --c-pt: #8ab17d;
+  --c-md: #4fb3a9; --c-nm: #4f9de8; --c-ha: #9b8cf2; --c-ng: #d97ad9;
+  --c-la: #f2789f; --c-ac: #c9707c; --c-uk: #7d8597;
+  --tile-text: #111;
+  --s-solid: #8d99ae; --s-liquid: #4f9de8; --s-gas: #f2c14b; --s-unknown: #3a4357;
+}
+[data-theme="light"] {
+  --bg: #f6f7fb;
+  --bg2: #ffffff;
+  --panel: #ffffff;
+  --text: #1d2433;
+  --muted: #5d6780;
+  --border: #d9deea;
+  --shadow: 0 10px 40px rgba(30,40,70,.18);
+  --c-am: #ffb3b0; --c-ae: #ffd3a6; --c-tm: #fbe7a1; --c-pt: #c8e3bd;
+  --c-md: #b4e3dc; --c-nm: #b9d8fb; --c-ha: #d6cffb; --c-ng: #f1c8f1;
+  --c-la: #ffc9da; --c-ac: #eec2c8; --c-uk: #dde1e9;
+  --tile-text: #1d2433;
+  --s-solid: #c3cad8; --s-liquid: #9cc8f7; --s-gas: #fde08a; --s-unknown: #eceff5;
+}
+
+/* =========================================================
+   2. Grundlayout
+   ========================================================= */
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  transition: background .3s, color .3s;
+}
+.pse-app { max-width: 1400px; margin: 0 auto; padding: 16px; }
+header.pse-head {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+header.pse-head h1 { font-size: clamp(1.2rem, 2.4vw, 1.8rem); margin: 0; }
+header.pse-head p { margin: 2px 0 0; color: var(--muted); font-size: .9rem; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.toolbar input[type="search"] {
+  padding: 8px 12px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--bg2); color: var(--text); min-width: 220px; font-size: .95rem;
+}
+button.btn {
+  padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--bg2); color: var(--text); cursor: pointer; font-size: .9rem;
+}
+button.btn:hover { border-color: var(--muted); }
+button.btn[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+
+/* Temperatur-Slider */
+.temp-box {
+  display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center;
+  background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 14px; margin-bottom: 12px;
+}
+.temp-box label { font-weight: 600; }
+.temp-box input[type="range"] { flex: 1 1 260px; accent-color: #e8575a; }
+.temp-val { font-variant-numeric: tabular-nums; min-width: 190px; }
+.state-legend { display: none; gap: 12px; font-size: .85rem; color: var(--muted); }
+.state-mode .state-legend { display: flex; }
+.state-legend span::before {
+  content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 3px;
+  margin-right: 5px; vertical-align: -2px; background: var(--sw);
+}
+
+/* =========================================================
+   3. Periodensystem-Raster
+   ========================================================= */
+.table-wrap { overflow-x: auto; padding-bottom: 6px; }
+.pse {
+  display: grid;
+  grid-template-columns: repeat(18, minmax(48px, 1fr));
+  grid-template-rows: repeat(7, auto) 14px repeat(2, auto);
+  gap: var(--gap);
+  min-width: 900px;
+  position: relative;
+}
+.tile {
+  aspect-ratio: 1 / 1.08;
+  perspective: 700px;
+  cursor: pointer;
+  border: none; padding: 0; background: none; font: inherit; color: inherit;
+  transition: opacity .25s, transform .2s;
+}
+.tile:hover { transform: translateY(-2px); z-index: 2; }
+.tile:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; border-radius: var(--radius); }
+.tile-inner {
+  position: relative; width: 100%; height: 100%;
+  transition: transform var(--flip) cubic-bezier(.4,.2,.2,1);
+  transform-style: preserve-3d;
+}
+.tile.flipped .tile-inner { transform: rotateY(180deg); }
+.face {
+  position: absolute; inset: 0; border-radius: 6px;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  background: var(--cat); color: var(--tile-text);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 3px; overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
+}
+.face .z { position: absolute; top: 3px; left: 5px; font-size: .62rem; font-weight: 600; opacity: .8; }
+.face .sym { font-size: clamp(.95rem, 1.6vw, 1.4rem); font-weight: 800; line-height: 1; }
+.face .nm { font-size: clamp(.45rem, .72vw, .64rem); margin-top: 3px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.face .ms { font-size: clamp(.42rem, .62vw, .58rem); opacity: .75; }
+.face.back { transform: rotateY(180deg); font-size: .55rem; text-align: center; gap: 1px; }
+.face.back b { font-size: .8rem; }
+.state-dot {
+  position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--sdot, transparent); display: none;
+}
+.state-mode .state-dot { display: block; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
+.state-mode .tile .face.front { background: var(--sbg); }
+
+.tile.dim { opacity: .18; }
+.tile.hit .face.front { box-shadow: 0 0 0 3px var(--text); }
+
+.placeholder {
+  border: 1px dashed var(--border); border-radius: 6px; display: flex; align-items: center;
+  justify-content: center; text-align: center; font-size: .6rem; color: var(--muted);
+}
+
+/* Gruppen-Nummern */
+.gnum { text-align: center; font-size: .65rem; color: var(--muted); align-self: end; }
+
+/* Legende im Raster oben */
+.legend {
+  grid-column: 3 / 13; grid-row: 1 / 3; align-self: center;
+  display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; padding: 0 6px;
+}
+.legend button {
+  border: 1px solid var(--border); background: var(--bg2); color: var(--text);
+  border-radius: 999px; padding: 4px 10px 4px 6px; font-size: .72rem; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.legend button::before {
+  content: ""; width: 12px; height: 12px; border-radius: 3px; background: var(--sw);
+}
+.legend button[aria-pressed="true"] { border-color: var(--text); box-shadow: 0 0 0 1px var(--text); }
+.legend-hint { width: 100%; text-align: center; font-size: .7rem; color: var(--muted); }
+
+/* =========================================================
+   4. Vergrößerte Detailkarte (Overlay)
+   ========================================================= */
+.overlay {
+  position: fixed; inset: 0; background: rgba(5,8,15,.6);
+  backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px; z-index: 100;
+  opacity: 0; pointer-events: none; transition: opacity .3s;
+}
+.overlay.open { opacity: 1; pointer-events: auto; }
+.card {
+  width: min(880px, 100%); height: min(90vh, 760px);
+  perspective: 1600px;
+}
+.card-inner {
+  position: relative; width: 100%; height: 100%;
+  transform-style: preserve-3d;
+  transition: transform .8s cubic-bezier(.4,.2,.2,1);
+}
+.card.flipped .card-inner { transform: rotateY(180deg); }
+.card-face {
+  position: absolute; inset: 0; border-radius: 16px;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  box-shadow: var(--shadow);
+}
+.card-front {
+  background: var(--cat); color: var(--tile-text);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.card-front .big-z { font-size: 2rem; font-weight: 700; opacity: .8; }
+.card-front .big-sym { font-size: 9rem; font-weight: 800; line-height: 1; }
+.card-front .big-name { font-size: 2rem; }
+.card-back {
+  transform: rotateY(180deg);
+  background: var(--panel); color: var(--text);
+  display: flex; flex-direction: column; overflow: hidden;
+  border-top: 10px solid var(--cat);
+}
+.card-head {
+  display: flex; align-items: center; gap: 16px; padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.card-head .chip {
+  width: 70px; height: 76px; border-radius: 10px; background: var(--cat); color: var(--tile-text);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; flex: none;
+}
+.card-head .chip b { font-size: 1.9rem; line-height: 1; }
+.card-head .chip small { font-size: .7rem; }
+.card-head h2 { margin: 0; font-size: 1.6rem; }
+.card-head .sub { color: var(--muted); font-size: .9rem; }
+.card-close {
+  margin-left: auto; align-self: flex-start;
+  width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--bg2); color: var(--text); font-size: 1.2rem; cursor: pointer;
+}
+.card-nav { display: flex; gap: 6px; align-self: flex-start; }
+.card-body {
+  flex: 1; overflow-y: auto; padding: 16px 20px 20px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+}
+.model-box {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+.model-switch { display: flex; gap: 6px; }
+.model-switch button { font-size: .8rem; padding: 5px 12px; }
+.model-view { width: 100%; display: flex; justify-content: center; align-items: center; min-height: 300px; }
+.model-view svg { width: 100%; max-width: 330px; height: auto; }
+.config { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9rem; text-align: center; }
+.config sup { font-size: .7em; }
+.shells-txt { font-size: .8rem; color: var(--muted); text-align: center; }
+
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-content: start; font-size: .93rem; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; font-weight: 500; }
+.facts .note { grid-column: 1 / -1; font-size: .8rem; color: var(--muted); font-style: italic; }
+.compounds { grid-column: 1 / -1; }
+.compounds h3 { margin: 4px 0 8px; font-size: 1rem; }
+.compounds ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
+.compounds li {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 999px;
+  padding: 5px 12px; font-size: .88rem;
+}
+
+/* Bohr-Animation */
+.shell-ring { fill: none; stroke: var(--border); stroke-width: 1; }
+.electron { fill: #4f9de8; }
+[data-theme="light"] .electron { fill: #2a6fc4; }
+.nucleus { fill: var(--cat); stroke: rgba(0,0,0,.25); }
+.nucleus-txt { fill: var(--tile-text); font-weight: 800; font-family: inherit; }
+.orbit { transform-origin: 0 0; animation: spin linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Orbitalschema */
+.orbitals { display: flex; flex-direction: column-reverse; gap: 6px; width: fit-content; margin: 0 auto; padding: 4px; }
+.orb-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
+.orb-row { display: flex; align-items: center; gap: 8px; }
+.orb-row .lbl { width: 30px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .85rem; text-align: right; color: var(--muted); }
+.orb-boxes { display: flex; }
+.orb-box {
+  width: 26px; height: 26px; border: 1.5px solid var(--text); margin-left: -1.5px;
+  display: flex; align-items: center; justify-content: center; font-size: .9rem; line-height: 1;
+  letter-spacing: -2px;
+}
+.orb-box:first-child { margin-left: 0; }
+.orb-legend { font-size: .75rem; color: var(--muted); text-align: center; }
+
+@media (max-width: 720px) {
+  .card-body { grid-template-columns: 1fr; }
+  .card-front .big-sym { font-size: 6rem; }
+  .card { height: 92vh; }
+  .card-head { flex-wrap: wrap; padding: 12px 14px; gap: 10px; }
+  .card-head > div:nth-child(2) { flex: 1 1 150px; }
+  .card-head h2 { font-size: 1.3rem; }
+  .card-nav { order: 3; }
+  .card-close { order: 2; }
+  .card-body { padding: 12px 14px 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbit { animation: none; }
+  .tile-inner, .card-inner { transition-duration: .01s; }
+}
+footer.pse-foot { margin-top: 14px; color: var(--muted); font-size: .75rem; text-align: center; }
+</style>
+</head>
+<body>
+<div class="pse-app" id="app">
+  <header class="pse-head">
+    <div>
+      <h1>Periodensystem der Elemente</h1>
+      <p>Klicke auf ein Element: Die Kachel dreht sich um und zeigt dir alle Details.</p>
+    </div>
+    <div class="toolbar">
+      <input type="search" id="search" placeholder="Suche: Name, Symbol oder Nr." aria-label="Element suchen">
+      <button class="btn" id="stateToggle" aria-pressed="false" title="Aggregatzustand bei gewählter Temperatur anzeigen">🌡️ Aggregatzustand</button>
+      <button class="btn" id="themeToggle" title="Hell/Dunkel umschalten">🌙 Dunkel</button>
+    </div>
+  </header>
+
+  <div class="temp-box" id="tempBox">
+    <label for="temp">Temperatur:</label>
+    <input type="range" id="temp" min="0" max="6000" step="1" value="293">
+    <span class="temp-val" id="tempVal"></span>
+    <div class="state-legend">
+      <span style="--sw:var(--s-solid)">fest</span>
+      <span style="--sw:var(--s-liquid)">flüssig</span>
+      <span style="--sw:var(--s-gas)">gasförmig</span>
+      <span style="--sw:var(--s-unknown)">unbekannt</span>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="pse" id="pse"></div>
+  </div>
+
+  <footer class="pse-foot">
+    Werte gerundet; Schmelz-/Siedepunkte bei Normaldruck. „ca.“ = geschätzt bzw. vorhergesagt. Massen in [ ] = Massenzahl des langlebigsten Isotops.
+  </footer>
+</div>
+
+<div class="overlay" id="overlay" aria-hidden="true">
+  <div class="card" id="card" role="dialog" aria-modal="true" aria-labelledby="cardTitle">
+    <div class="card-inner">
+      <div class="card-face card-front" id="cardFront"></div>
+      <div class="card-face card-back" id="cardBack"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   5. Daten aller 118 Elemente
+   Format: [Z, Symbol, Name, Atommasse, Kategorie, Schmelzpunkt K, Siedepunkt K,
+            Elektronegativität (Pauling), Entdecker, Entdeckung, Verbindungen (mit ; getrennt), Extra]
+   "~1234" = geschätzter Wert, null = unbekannt
+   Kategorien: am Alkalimetall, ae Erdalkalimetall, tm Übergangsmetall, pt Metall (Hauptgruppe),
+               md Halbmetall, nm Nichtmetall, ha Halogen, ng Edelgas, la Lanthanoid, ac Actinoid, uk unbekannt
+   ========================================================= */
+const RAW = [
+[1,"H","Wasserstoff",1.008,"nm",13.99,20.28,2.20,"Henry Cavendish","1766","Wasser (H₂O);Ammoniak (NH₃);Methan (CH₄);Chlorwasserstoff (HCl)"],
+[2,"He","Helium",4.0026,"ng",null,4.22,null,"Pierre Janssen, Norman Lockyer","1868","Keine stabilen Verbindungen (Edelgas)",{note:"Wird bei Normaldruck nicht fest – erst ab ca. 25 bar (unter 0,95 K)."}],
+[3,"Li","Lithium",6.94,"am",453.65,1603,0.98,"Johan August Arfwedson","1817","Lithiumcarbonat (Li₂CO₃);Lithiumhydroxid (LiOH);Lithiumcobaltoxid (LiCoO₂, Akkus)"],
+[4,"Be","Beryllium",9.0122,"ae",1560,2742,1.57,"Louis-Nicolas Vauquelin","1798","Berylliumoxid (BeO);Beryll / Smaragd (Be₃Al₂Si₆O₁₈);Berylliumchlorid (BeCl₂)"],
+[5,"B","Bor",10.81,"md",2349,4200,2.04,"J. L. Gay-Lussac, L. J. Thénard, Humphry Davy","1808","Borsäure (H₃BO₃);Borax (Na₂B₄O₇·10H₂O);Bornitrid (BN)"],
+[6,"C","Kohlenstoff",12.011,"nm",null,null,2.55,"Seit der Antike bekannt","Antike","Kohlenstoffdioxid (CO₂);Kohlenstoffmonoxid (CO);Methan (CH₄);Calciumcarbonat (CaCO₃)",{note:"Sublimiert bei Normaldruck bei ca. 3642 °C (3915 K).",sub:3915}],
+[7,"N","Stickstoff",14.007,"nm",63.15,77.36,3.04,"Daniel Rutherford","1772","Ammoniak (NH₃);Salpetersäure (HNO₃);Lachgas (N₂O);Stickstoffdioxid (NO₂)"],
+[8,"O","Sauerstoff",15.999,"nm",54.36,90.19,3.44,"Carl Wilhelm Scheele, Joseph Priestley","1771 / 1774","Wasser (H₂O);Kohlenstoffdioxid (CO₂);Ozon (O₃);Eisen(III)-oxid (Fe₂O₃)"],
+[9,"F","Fluor",18.998,"ha",53.48,85.03,3.98,"Henri Moissan","1886","Fluorwasserstoff (HF);Flussspat (CaF₂);Natriumfluorid (NaF);PTFE / Teflon ((C₂F₄)ₙ)"],
+[10,"Ne","Neon",20.180,"ng",24.56,27.10,null,"William Ramsay, Morris Travers","1898","Keine stabilen Verbindungen (Edelgas)"],
+[11,"Na","Natrium",22.990,"am",370.94,1156.09,0.93,"Humphry Davy","1807","Kochsalz (NaCl);Natronlauge (NaOH);Natron (NaHCO₃);Soda (Na₂CO₃)"],
+[12,"Mg","Magnesium",24.305,"ae",923,1363,1.31,"Joseph Black (erkannt), Humphry Davy (isoliert)","1755 / 1808","Magnesiumoxid (MgO);Bittersalz (MgSO₄·7H₂O);Chlorophyll;Magnesit (MgCO₃)"],
+[13,"Al","Aluminium",26.982,"pt",933.47,2792,1.61,"Hans Christian Ørsted","1825","Aluminiumoxid / Korund (Al₂O₃);Aluminiumchlorid (AlCl₃);Alaun (KAl(SO₄)₂·12H₂O)"],
+[14,"Si","Silicium",28.085,"md",1687,3538,1.90,"Jöns Jakob Berzelius","1824","Siliciumdioxid / Quarz (SiO₂);Siliciumcarbid (SiC);Silikone;Monosilan (SiH₄)"],
+[15,"P","Phosphor",30.974,"nm",317.3,553.7,2.19,"Hennig Brand","1669","Phosphorsäure (H₃PO₄);Phosphorpentoxid (P₄O₁₀);Calciumphosphat (Ca₃(PO₄)₂);ATP"],
+[16,"S","Schwefel",32.06,"nm",388.36,717.8,2.58,"Seit der Antike bekannt","Antike","Schwefelsäure (H₂SO₄);Schwefeldioxid (SO₂);Schwefelwasserstoff (H₂S);Pyrit (FeS₂)"],
+[17,"Cl","Chlor",35.45,"ha",171.6,239.11,3.16,"Carl Wilhelm Scheele","1774","Kochsalz (NaCl);Salzsäure (HCl);Natriumhypochlorit (NaClO);PVC"],
+[18,"Ar","Argon",39.95,"ng",83.81,87.30,null,"Lord Rayleigh, William Ramsay","1894","Keine stabilen Verbindungen (Edelgas)"],
+[19,"K","Kalium",39.098,"am",336.53,1032,0.82,"Humphry Davy","1807","Kaliumchlorid (KCl);Kalisalpeter (KNO₃);Kalilauge (KOH);Pottasche (K₂CO₃)"],
+[20,"Ca","Calcium",40.078,"ae",1115,1757,1.00,"Humphry Davy","1808","Kalk (CaCO₃);Gips (CaSO₄·2H₂O);Branntkalk (CaO);Löschkalk (Ca(OH)₂)"],
+[21,"Sc","Scandium",44.956,"tm",1814,3109,1.36,"Lars Fredrik Nilson","1879","Scandiumoxid (Sc₂O₃);Scandiumchlorid (ScCl₃)"],
+[22,"Ti","Titan",47.867,"tm",1941,3560,1.54,"William Gregor","1791","Titandioxid (TiO₂, Weißpigment);Titantetrachlorid (TiCl₄);Ilmenit (FeTiO₃)"],
+[23,"V","Vanadium",50.942,"tm",2183,3680,1.63,"Andrés Manuel del Río / Nils Gabriel Sefström","1801 / 1830","Vanadiumpentoxid (V₂O₅);Vanadylsulfat (VOSO₄)"],
+[24,"Cr","Chrom",51.996,"tm",2180,2944,1.66,"Louis-Nicolas Vauquelin","1797","Chrom(III)-oxid (Cr₂O₃);Kaliumdichromat (K₂Cr₂O₇);Chromtrioxid (CrO₃)"],
+[25,"Mn","Mangan",54.938,"tm",1519,2334,1.55,"Johan Gottlieb Gahn","1774","Kaliumpermanganat (KMnO₄);Braunstein (MnO₂)"],
+[26,"Fe","Eisen",55.845,"tm",1811,3134,1.83,"Seit der Antike bekannt","Antike","Hämatit / Rost (Fe₂O₃);Magnetit (Fe₃O₄);Pyrit (FeS₂);Hämoglobin"],
+[27,"Co","Cobalt",58.933,"tm",1768,3200,1.88,"Georg Brandt","1735","Cobalt(II)-chlorid (CoCl₂);Kobaltblau (CoAl₂O₄);Vitamin B₁₂"],
+[28,"Ni","Nickel",58.693,"tm",1728,3186,1.91,"Axel Fredrik Cronstedt","1751","Nickel(II)-oxid (NiO);Nickelsulfat (NiSO₄);Nickeltetracarbonyl (Ni(CO)₄)"],
+[29,"Cu","Kupfer",63.546,"tm",1357.77,2835,1.90,"Seit der Antike bekannt","Antike","Kupfersulfat (CuSO₄);Kupfer(II)-oxid (CuO);Malachit (Cu₂CO₃(OH)₂);Messing / Bronze (Legierungen)"],
+[30,"Zn","Zink",65.38,"tm",692.68,1180,1.65,"Andreas Sigismund Marggraf (Isolierung in Europa)","1746","Zinkoxid (ZnO);Zinkblende (ZnS);Zinkchlorid (ZnCl₂)"],
+[31,"Ga","Gallium",69.723,"pt",302.91,2673,1.81,"Paul-Émile Lecoq de Boisbaudran","1875","Galliumarsenid (GaAs);Galliumnitrid (GaN, blaue LEDs)"],
+[32,"Ge","Germanium",72.630,"md",1211.40,3106,2.01,"Clemens Winkler","1886","Germaniumdioxid (GeO₂);Germaniumtetrachlorid (GeCl₄)"],
+[33,"As","Arsen",74.922,"md",null,null,2.18,"Albertus Magnus","um 1250","Arsenik (As₂O₃);Galliumarsenid (GaAs);Arsenwasserstoff (AsH₃)",{note:"Sublimiert bei Normaldruck bei 615 °C (888 K).",sub:888}],
+[34,"Se","Selen",78.971,"nm",494,958,2.55,"Jöns Jakob Berzelius","1817","Selendioxid (SeO₂);Selenwasserstoff (H₂Se);Zinkselenid (ZnSe)"],
+[35,"Br","Brom",79.904,"ha",265.8,332.0,2.96,"Antoine-Jérôme Balard, Carl Löwig","1826","Kaliumbromid (KBr);Bromwasserstoff (HBr);Silberbromid (AgBr, Fotografie)"],
+[36,"Kr","Krypton",83.798,"ng",115.78,119.93,3.00,"William Ramsay, Morris Travers","1898","Kryptondifluorid (KrF₂)"],
+[37,"Rb","Rubidium",85.468,"am",312.45,961,0.82,"Robert Bunsen, Gustav Kirchhoff","1861","Rubidiumchlorid (RbCl);Rubidiumhydroxid (RbOH)"],
+[38,"Sr","Strontium",87.62,"ae",1050,1655,0.95,"Adair Crawford (erkannt), Humphry Davy (isoliert)","1790 / 1808","Strontiumcarbonat (SrCO₃);Strontiumnitrat (Sr(NO₃)₂, rotes Feuerwerk);Strontiumtitanat (SrTiO₃)"],
+[39,"Y","Yttrium",88.906,"tm",1799,3609,1.22,"Johan Gadolin","1794","Yttriumoxid (Y₂O₃);YBCO-Supraleiter (YBa₂Cu₃O₇);YAG (Y₃Al₅O₁₂, Laser)"],
+[40,"Zr","Zirconium",91.224,"tm",2128,4682,1.33,"Martin Heinrich Klaproth","1789","Zirconiumdioxid (ZrO₂);Zirkon (ZrSiO₄)"],
+[41,"Nb","Niob",92.906,"tm",2750,5017,1.6,"Charles Hatchett","1801","Niobpentoxid (Nb₂O₅);Niob-Titan (NbTi, Supraleiter);Lithiumniobat (LiNbO₃)"],
+[42,"Mo","Molybdän",95.95,"tm",2896,4912,2.16,"Carl Wilhelm Scheele","1778","Molybdändisulfid (MoS₂, Schmierstoff);Molybdäntrioxid (MoO₃)"],
+[43,"Tc","Technetium","[98]","tm",2430,4538,1.9,"Carlo Perrier, Emilio Segrè","1937","Natriumpertechnetat (NaTcO₄);Tc-99m-Radiopharmaka (Medizin)"],
+[44,"Ru","Ruthenium",101.07,"tm",2607,4423,2.2,"Karl Ernst Claus","1844","Rutheniumtetroxid (RuO₄);Rutheniumdioxid (RuO₂)"],
+[45,"Rh","Rhodium",102.91,"tm",2237,3968,2.28,"William Hyde Wollaston","1803","Rhodium(III)-chlorid (RhCl₃);Wilkinson-Katalysator (RhCl(PPh₃)₃)"],
+[46,"Pd","Palladium",106.42,"tm",1828.05,3236,2.20,"William Hyde Wollaston","1803","Palladium(II)-chlorid (PdCl₂);Tetrakis(triphenylphosphin)palladium (Pd(PPh₃)₄)"],
+[47,"Ag","Silber",107.87,"tm",1234.93,2435,1.93,"Seit der Antike bekannt","Antike","Silbernitrat (AgNO₃);Silberchlorid (AgCl);Silberbromid (AgBr);Silbersulfid (Ag₂S, Anlaufen)"],
+[48,"Cd","Cadmium",112.41,"tm",594.22,1040,1.69,"Friedrich Stromeyer","1817","Cadmiumsulfid (CdS, Cadmiumgelb);Cadmiumtellurid (CdTe, Solarzellen)"],
+[49,"In","Indium",114.82,"pt",429.75,2345,1.78,"Ferdinand Reich, Hieronymus Theodor Richter","1863","Indiumzinnoxid (ITO, Touchscreens);Indiumphosphid (InP)"],
+[50,"Sn","Zinn",118.71,"pt",505.08,2875,1.96,"Seit der Antike bekannt","Antike","Zinndioxid (SnO₂);Zinn(II)-chlorid (SnCl₂);Bronze (Cu-Sn-Legierung)"],
+[51,"Sb","Antimon",121.76,"md",903.78,1908,2.05,"Seit der Antike bekannt","Antike","Grauspießglanz (Sb₂S₃);Antimontrioxid (Sb₂O₃)"],
+[52,"Te","Tellur",127.60,"md",722.66,1261,2.1,"Franz-Joseph Müller von Reichenstein","1782","Cadmiumtellurid (CdTe);Bismuttellurid (Bi₂Te₃)"],
+[53,"I","Iod",126.90,"ha",386.85,457.4,2.66,"Bernard Courtois","1811","Kaliumiodid (KI);Silberiodid (AgI);Iodtinktur;Thyroxin (Schilddrüsenhormon)"],
+[54,"Xe","Xenon",131.29,"ng",161.40,165.05,2.6,"William Ramsay, Morris Travers","1898","Xenondifluorid (XeF₂);Xenontetrafluorid (XeF₄);Xenontrioxid (XeO₃)"],
+[55,"Cs","Caesium",132.91,"am",301.7,944,0.79,"Robert Bunsen, Gustav Kirchhoff","1860","Caesiumchlorid (CsCl);Caesiumhydroxid (CsOH)"],
+[56,"Ba","Barium",137.33,"ae",1000,2118,0.89,"Carl Wilhelm Scheele (erkannt), Humphry Davy (isoliert)","1772 / 1808","Bariumsulfat (BaSO₄, Röntgenkontrastmittel);Bariumcarbonat (BaCO₃)"],
+[57,"La","Lanthan",138.91,"la",1193,3737,1.10,"Carl Gustav Mosander","1839","Lanthanoxid (La₂O₃);Lanthan-Nickel (LaNi₅, Wasserstoffspeicher)"],
+[58,"Ce","Cer",140.12,"la",1068,3716,1.12,"J. J. Berzelius, W. Hisinger / M. H. Klaproth","1803","Cerdioxid (CeO₂, Poliermittel);Cer-Eisen (Feuerstein)"],
+[59,"Pr","Praseodym",140.91,"la",1208,3403,1.13,"Carl Auer von Welsbach","1885","Praseodymoxid (Pr₆O₁₁);Didymglas (Schweißerbrillen)"],
+[60,"Nd","Neodym",144.24,"la",1297,3347,1.14,"Carl Auer von Welsbach","1885","Neodym-Magnete (Nd₂Fe₁₄B);Neodymoxid (Nd₂O₃)"],
+[61,"Pm","Promethium","[145]","la",1315,3273,null,"J. A. Marinsky, L. E. Glendenin, C. D. Coryell","1945","Promethium(III)-chlorid (PmCl₃);Leuchtfarben (früher)"],
+[62,"Sm","Samarium",150.36,"la",1345,2173,1.17,"Paul-Émile Lecoq de Boisbaudran","1879","Samarium-Cobalt-Magnete (SmCo₅);Samarium(II)-iodid (SmI₂)"],
+[63,"Eu","Europium",151.96,"la",1099,1802,null,"Eugène-Anatole Demarçay","1901","Europiumoxid (Eu₂O₃, roter Leuchtstoff);Leuchtstoffe in Euro-Banknoten"],
+[64,"Gd","Gadolinium",157.25,"la",1585,3273,1.20,"Jean Charles Galissard de Marignac","1880","MRT-Kontrastmittel (Gd-Komplexe);Gadoliniumoxid (Gd₂O₃)"],
+[65,"Tb","Terbium",158.93,"la",1629,3396,null,"Carl Gustav Mosander","1843","Terbium-Leuchtstoffe (grün);Terfenol-D (TbDyFe)"],
+[66,"Dy","Dysprosium",162.50,"la",1680,2840,1.22,"Paul-Émile Lecoq de Boisbaudran","1886","Dysprosiumoxid (Dy₂O₃);Zusatz in Neodym-Magneten"],
+[67,"Ho","Holmium",164.93,"la",1734,2873,1.23,"Per Teodor Cleve / M. Delafontaine, J.-L. Soret","1878 / 1879","Holmiumoxid (Ho₂O₃);Ho:YAG-Laser (Medizin)"],
+[68,"Er","Erbium",167.26,"la",1802,3141,1.24,"Carl Gustav Mosander","1843","Erbiumoxid (Er₂O₃, rosa Glas);Erbium-dotierte Glasfaserverstärker"],
+[69,"Tm","Thulium",168.93,"la",1818,2223,1.25,"Per Teodor Cleve","1879","Thuliumoxid (Tm₂O₃);Tm-170 (Röntgenquellen)"],
+[70,"Yb","Ytterbium",173.05,"la",1097,1469,null,"Jean Charles Galissard de Marignac","1878","Ytterbiumoxid (Yb₂O₃);Yb:YAG-Laser"],
+[71,"Lu","Lutetium",174.97,"la",1925,3675,1.27,"Georges Urbain / Carl Auer von Welsbach","1907","Lutetiumoxid (Lu₂O₃);Lu-177-Radiopharmaka (Krebstherapie)"],
+[72,"Hf","Hafnium",178.49,"tm",2506,4876,1.3,"Dirk Coster, George de Hevesy","1923","Hafniumdioxid (HfO₂, Mikrochips);Hafniumcarbid (HfC)"],
+[73,"Ta","Tantal",180.95,"tm",3290,5731,1.5,"Anders Gustaf Ekeberg","1802","Tantalpentoxid (Ta₂O₅, Kondensatoren);Tantalcarbid (TaC)"],
+[74,"W","Wolfram",183.84,"tm",3695,5828,2.36,"Juan José und Fausto Elhuyar","1783","Wolframcarbid (WC, Hartmetall);Wolframtrioxid (WO₃);Scheelit (CaWO₄)"],
+[75,"Re","Rhenium",186.21,"tm",3459,5869,1.9,"Walter Noddack, Ida Tacke, Otto Berg","1925","Rheniumheptoxid (Re₂O₇);Nickel-Superlegierungen (Turbinen)"],
+[76,"Os","Osmium",190.23,"tm",3306,5285,2.2,"Smithson Tennant","1803","Osmiumtetroxid (OsO₄)"],
+[77,"Ir","Iridium",192.22,"tm",2719,4403,2.20,"Smithson Tennant","1803","Iridiumdioxid (IrO₂);Platin-Iridium (Urkilogramm)"],
+[78,"Pt","Platin",195.08,"tm",2041.4,4098,2.28,"Antonio de Ulloa","1748","Cisplatin (Krebsmedikament);Hexachloroplatinsäure (H₂PtCl₆);Fahrzeugkatalysatoren"],
+[79,"Au","Gold",196.97,"tm",1337.33,3243,2.54,"Seit der Antike bekannt","Antike","Tetrachlorgoldsäure (HAuCl₄);Gold(III)-chlorid (AuCl₃);Goldnanopartikel"],
+[80,"Hg","Quecksilber",200.59,"tm",234.32,629.88,2.00,"Seit der Antike bekannt","Antike","Zinnober (HgS);Quecksilber(II)-chlorid (HgCl₂);Kalomel (Hg₂Cl₂);Amalgame"],
+[81,"Tl","Thallium",204.38,"pt",577,1746,1.62,"William Crookes","1861","Thallium(I)-sulfat (Tl₂SO₄);Thalliumbromid-iodid (Infrarotoptik)"],
+[82,"Pb","Blei",207.2,"pt",600.61,2022,2.33,"Seit der Antike bekannt","Antike","Bleiglanz (PbS);Bleioxid (PbO);Mennige (Pb₃O₄);Bleisulfat (PbSO₄, Bleiakku)"],
+[83,"Bi","Bismut",208.98,"pt",544.7,1837,2.02,"Claude François Geoffroy (als Element erkannt)","1753","Bismutoxid (Bi₂O₃);Bismutoxidchlorid (BiOCl, Kosmetik);Bismutsubsalicylat (Magenmittel)"],
+[84,"Po","Polonium","[209]","pt",527,1235,2.0,"Marie und Pierre Curie","1898","Poloniumdioxid (PoO₂);Poloniumwasserstoff (PoH₂)"],
+[85,"At","Astat","[210]","ha","~575","~610",2.2,"D. R. Corson, K. R. MacKenzie, Emilio Segrè","1940","Astatwasserstoff (HAt);At-211-Radiopharmaka (Forschung)"],
+[86,"Rn","Radon","[222]","ng",202,211.5,2.2,"Friedrich Ernst Dorn","1900","Radondifluorid (RnF₂)"],
+[87,"Fr","Francium","[223]","am","~300","~950",0.7,"Marguerite Perey","1939","Keine in wägbarer Menge (extrem kurzlebig)"],
+[88,"Ra","Radium","[226]","ae",973,2010,0.9,"Marie und Pierre Curie","1898","Radiumchlorid (RaCl₂);Radiumbromid (RaBr₂);Ra-223-Dichlorid (Krebstherapie)"],
+[89,"Ac","Actinium","[227]","ac",1323,3471,1.1,"André-Louis Debierne","1899","Actinium(III)-oxid (Ac₂O₃);Ac-225 (Krebstherapie)"],
+[90,"Th","Thorium",232.04,"ac",2023,5061,1.3,"Jöns Jakob Berzelius","1829","Thoriumdioxid (ThO₂, Glühstrümpfe);Thorianit"],
+[91,"Pa","Protactinium",231.04,"ac",1841,"~4300",1.5,"K. Fajans, O. H. Göhring / Otto Hahn, Lise Meitner","1913 / 1918","Protactiniumpentoxid (Pa₂O₅)"],
+[92,"U","Uran",238.03,"ac",1405.3,4404,1.38,"Martin Heinrich Klaproth","1789","Urandioxid (UO₂, Brennstoff);Uranhexafluorid (UF₆);Yellowcake (U₃O₈)"],
+[93,"Np","Neptunium","[237]","ac",917,4273,1.36,"Edwin McMillan, Philip Abelson","1940","Neptuniumdioxid (NpO₂)"],
+[94,"Pu","Plutonium","[244]","ac",912.5,3501,1.28,"Glenn T. Seaborg, Arthur Wahl, Joseph Kennedy, Edwin McMillan","1940","Plutoniumdioxid (PuO₂);MOX-Brennstoff"],
+[95,"Am","Americium","[243]","ac",1449,2880,1.13,"Glenn T. Seaborg, Ralph James, Leon Morgan, Albert Ghiorso","1944","Americiumdioxid (AmO₂, Rauchmelder)"],
+[96,"Cm","Curium","[247]","ac",1613,3383,1.28,"Glenn T. Seaborg, Ralph James, Albert Ghiorso","1944","Curium(III)-oxid (Cm₂O₃)"],
+[97,"Bk","Berkelium","[247]","ac",1259,"~2900",1.3,"Stanley G. Thompson, Albert Ghiorso, Glenn T. Seaborg","1949","Berkeliumdioxid (BkO₂)"],
+[98,"Cf","Californium","[251]","ac",1173,"~1743",1.3,"S. G. Thompson, K. Street, A. Ghiorso, G. T. Seaborg","1950","Californium(III)-oxid (Cf₂O₃);Cf-252 (Neutronenquellen)"],
+[99,"Es","Einsteinium","[252]","ac",1133,"~1269",1.3,"Albert Ghiorso et al. (Fallout der Wasserstoffbombe „Ivy Mike“)","1952","Einsteinium(III)-oxid (Es₂O₃)"],
+[100,"Fm","Fermium","[257]","ac","~1800",null,1.3,"Albert Ghiorso et al. (Fallout „Ivy Mike“)","1952","Keine in wägbarer Menge bekannt"],
+[101,"Md","Mendelevium","[258]","ac","~1100",null,1.3,"Albert Ghiorso, Glenn T. Seaborg et al.","1955","Keine in wägbarer Menge bekannt"],
+[102,"No","Nobelium","[259]","ac","~1100",null,1.3,"JINR Dubna / LBNL Berkeley","1958–1966","Keine in wägbarer Menge bekannt"],
+[103,"Lr","Lawrencium","[266]","ac","~1900",null,1.3,"Albert Ghiorso et al. (Berkeley)","1961","Keine in wägbarer Menge bekannt"],
+[104,"Rf","Rutherfordium","[267]","tm","~2400","~5800",null,"JINR Dubna / LBNL Berkeley","1964 / 1969","Rutherfordiumtetrachlorid (RfCl₄, nur Einzelatome)"],
+[105,"Db","Dubnium","[268]","tm",null,null,null,"JINR Dubna / LBNL Berkeley","1968 / 1970","Dubniumoxidchlorid (DbOCl₃, nur Einzelatome)"],
+[106,"Sg","Seaborgium","[269]","tm",null,null,null,"Albert Ghiorso et al. (Berkeley)","1974","Seaborgiumdioxiddichlorid (SgO₂Cl₂, nur Einzelatome)"],
+[107,"Bh","Bohrium","[270]","tm",null,null,null,"P. Armbruster, G. Münzenberg (GSI Darmstadt)","1981","Bohriumtrioxidchlorid (BhO₃Cl, nur Einzelatome)"],
+[108,"Hs","Hassium","[269]","tm",null,null,null,"P. Armbruster, G. Münzenberg (GSI Darmstadt)","1984","Hassiumtetroxid (HsO₄, nur Einzelatome)"],
+[109,"Mt","Meitnerium","[278]","uk",null,null,null,"P. Armbruster, G. Münzenberg (GSI Darmstadt)","1982","Keine bekannt"],
+[110,"Ds","Darmstadtium","[281]","uk",null,null,null,"Sigurd Hofmann et al. (GSI Darmstadt)","1994","Keine bekannt"],
+[111,"Rg","Roentgenium","[282]","uk",null,null,null,"Sigurd Hofmann et al. (GSI Darmstadt)","1994","Keine bekannt"],
+[112,"Cn","Copernicium","[285]","uk",null,null,null,"Sigurd Hofmann et al. (GSI Darmstadt)","1996","Keine bekannt"],
+[113,"Nh","Nihonium","[286]","uk",null,null,null,"Kōsuke Morita et al. (RIKEN, Japan)","2004","Keine bekannt"],
+[114,"Fl","Flerovium","[289]","uk",null,null,null,"JINR Dubna / LLNL","1998","Keine bekannt"],
+[115,"Mc","Moscovium","[290]","uk",null,null,null,"JINR Dubna / LLNL","2003","Keine bekannt"],
+[116,"Lv","Livermorium","[293]","uk",null,null,null,"JINR Dubna / LLNL","2000","Keine bekannt"],
+[117,"Ts","Tenness","[294]","uk",null,null,null,"JINR Dubna / ORNL / Vanderbilt University","2010","Keine bekannt"],
+[118,"Og","Oganesson","[294]","uk",null,null,null,"JINR Dubna / LLNL","2002 / 2006","Keine bekannt"]
+];
+
+const CATS = {
+  am: "Alkalimetalle", ae: "Erdalkalimetalle", tm: "Übergangsmetalle", pt: "Metalle (Hauptgruppe)",
+  md: "Halbmetalle", nm: "Nichtmetalle", ha: "Halogene", ng: "Edelgase",
+  la: "Lanthanoide", ac: "Actinoide", uk: "Eigenschaften unbekannt"
+};
+
+/* =========================================================
+   6. Hilfsfunktionen: Werte, Position, Elektronenkonfiguration
+   ========================================================= */
+function parseVal(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "string" && v.startsWith("~")) return { k: parseFloat(v.slice(1)), est: true };
+  return { k: v, est: false };
+}
+const fmt = (n, d) => n.toLocaleString("de-DE", { maximumFractionDigits: d, minimumFractionDigits: 0 });
+function fmtTemp(p) {
+  if (!p) return "unbekannt";
+  const c = p.k - 273.15;
+  return (p.est ? "ca. " : "") + fmt(c, 2) + " °C (" + fmt(p.k, 2) + " K)";
+}
+
+const PERIOD_START = [1, 3, 11, 19, 37, 55, 87, 119];
+function position(z) {
+  let p = 0; while (z >= PERIOD_START[p + 1]) p++;
+  const period = p + 1, i = z - PERIOD_START[p];
+  if (period === 1) return { period, group: z === 1 ? 1 : 18, row: 1, col: z === 1 ? 1 : 18 };
+  if (period <= 3) { const g = i < 2 ? i + 1 : i + 11; return { period, group: g, row: period, col: g }; }
+  if (period <= 5) return { period, group: i + 1, row: period, col: i + 1 };
+  if (i < 2) return { period, group: i + 1, row: period, col: i + 1 };
+  if (i <= 16) return { period, group: 3, row: period === 6 ? 9 : 10, col: i + 1, f: true };
+  const g = i - 13; return { period, group: g, row: period, col: g };
+}
+
+const ORDER = ["1s","2s","2p","3s","3p","4s","3d","4p","5s","4d","5p","6s","4f","5d","6p","7s","5f","6d","7p"];
+const CAP = { s: 2, p: 6, d: 10, f: 14 };
+// Ausnahmen von der Madelung-Regel (tatsächliche Grundzustände)
+const EXC = {
+  24:{"4s":-1,"3d":1}, 29:{"4s":-1,"3d":1}, 41:{"5s":-1,"4d":1}, 42:{"5s":-1,"4d":1},
+  44:{"5s":-1,"4d":1}, 45:{"5s":-1,"4d":1}, 46:{"5s":-2,"4d":2}, 47:{"5s":-1,"4d":1},
+  57:{"4f":-1,"5d":1}, 58:{"4f":-1,"5d":1}, 64:{"4f":-1,"5d":1},
+  78:{"6s":-1,"5d":1}, 79:{"6s":-1,"5d":1},
+  89:{"5f":-1,"6d":1}, 90:{"5f":-2,"6d":2}, 91:{"5f":-1,"6d":1}, 92:{"5f":-1,"6d":1},
+  93:{"5f":-1,"6d":1}, 96:{"5f":-1,"6d":1}, 103:{"6d":-1,"7p":1}
+};
+function configOf(z) {
+  const occ = {}; let left = z;
+  for (const o of ORDER) { if (!left) break; const n = Math.min(CAP[o[1]], left); occ[o] = n; left -= n; }
+  const ex = EXC[z];
+  if (ex) for (const o in ex) { occ[o] = (occ[o] || 0) + ex[o]; if (!occ[o]) delete occ[o]; }
+  return occ;
+}
+// Sortierung nach Schale, dann Unterschale (für die Anzeige)
+const L_ORDER = "spdf";
+function sortedOrbitals(occ) {
+  return Object.keys(occ).sort((a, b) => (a[0] - b[0]) || (L_ORDER.indexOf(a[1]) - L_ORDER.indexOf(b[1])));
+}
+const NOBLE = [[86,"Rn"],[54,"Xe"],[36,"Kr"],[18,"Ar"],[10,"Ne"],[2,"He"]];
+function configString(z) {
+  const occ = configOf(z);
+  let coreZ = 0, coreSym = "";
+  for (const [nz, s] of NOBLE) if (nz < z) { coreZ = nz; coreSym = s; break; }
+  const core = coreZ ? configOf(coreZ) : {};
+  // Reihenfolge wie üblich: nach Schale sortiert
+  const orderShown = sortedOrbitals(occ).filter(o => !(core[o] && core[o] === occ[o]));
+  return (coreSym ? "[" + coreSym + "] " : "") + orderShown.map(o => o + "<sup>" + occ[o] + "</sup>").join(" ");
+}
+function shellsOf(z) {
+  const occ = configOf(z), sh = [];
+  for (const o in occ) { const n = +o[0]; sh[n - 1] = (sh[n - 1] || 0) + occ[o]; }
+  for (let i = 0; i < sh.length; i++) sh[i] = sh[i] || 0;
+  return sh;
+}
+
+const ELEMENTS = RAW.map(r => {
+  const e = {
+    z: r[0], sym: r[1], name: r[2], mass: r[3], cat: r[4],
+    mp: parseVal(r[5]), bp: parseVal(r[6]), en: r[7],
+    disc: r[8], year: r[9], comps: r[10].split(";"), extra: r[11] || {}
+  };
+  Object.assign(e, position(e.z));
+  return e;
+});
+
+function stateAt(e, T) {
+  if (e.extra.sub) return T < e.extra.sub ? "solid" : "gas";
+  const mp = e.mp && e.mp.k, bp = e.bp && e.bp.k;
+  if (mp == null && bp == null) return "unknown";
+  if (mp == null) return T < bp ? "liquid" : "gas";        // Helium
+  if (T < mp) return "solid";
+  if (bp == null) return "unknown";
+  return T < bp ? "liquid" : "gas";
+}
+const STATE_DE = { solid: "fest", liquid: "flüssig", gas: "gasförmig", unknown: "unbekannt" };
+const STATE_VAR = { solid: "var(--s-solid)", liquid: "var(--s-liquid)", gas: "var(--s-gas)", unknown: "var(--s-unknown)" };
+const massTxt = e => typeof e.mass === "number" ? fmt(e.mass, 4) + " u" : e.mass + " u";
+
+/* =========================================================
+   7. Periodensystem aufbauen
+   ========================================================= */
+const pse = document.getElementById("pse");
+const tiles = new Map();
+
+function build() {
+  // Legende
+  const legend = document.createElement("div");
+  legend.className = "legend";
+  for (const key in CATS) {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = CATS[key]; b.dataset.cat = key;
+    b.style.setProperty("--sw", `var(--c-${key})`);
+    b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", () => toggleCat(key, b));
+    legend.appendChild(b);
+  }
+  const hint = document.createElement("div");
+  hint.className = "legend-hint"; hint.textContent = "Klicke auf eine Gruppe, um sie hervorzuheben";
+  legend.appendChild(hint);
+  pse.appendChild(legend);
+
+  // Platzhalter für Lanthanoide/Actinoide
+  [[6, "57–71", "Lanthanoide"], [7, "89–103", "Actinoide"]].forEach(([row, range, label]) => {
+    const ph = document.createElement("div");
+    ph.className = "placeholder";
+    ph.style.gridRow = row; ph.style.gridColumn = 3;
+    ph.innerHTML = range + "<br>" + label;
+    pse.appendChild(ph);
+  });
+
+  for (const e of ELEMENTS) {
+    const t = document.createElement("button");
+    t.type = "button";
+    t.className = "tile";
+    t.style.gridRow = e.row; t.style.gridColumn = e.col;
+    t.style.setProperty("--cat", `var(--c-${e.cat})`);
+    t.setAttribute("aria-label", `${e.name} (${e.sym}), Ordnungszahl ${e.z}`);
+    t.innerHTML = `
+      <div class="tile-inner">
+        <div class="face front">
+          <span class="z">${e.z}</span><span class="state-dot"></span>
+          <span class="sym">${e.sym}</span>
+          <span class="nm">${e.name}</span>
+          <span class="ms">${typeof e.mass === "number" ? fmt(e.mass, 3) : e.mass}</span>
+        </div>
+        <div class="face back">
+          <b>${e.sym}</b>
+          <span>${shellsOf(e.z).join("-")}</span>
+          <span>Details …</span>
+        </div>
+      </div>`;
+    t.addEventListener("click", () => openElement(e));
+    pse.appendChild(t);
+    tiles.set(e.z, t);
+  }
+}
+
+/* =========================================================
+   8. Suche, Gruppen-Filter, Temperatur
+   ========================================================= */
+let activeCat = null;
+function toggleCat(key, btn) {
+  activeCat = activeCat === key ? null : key;
+  document.querySelectorAll(".legend button").forEach(b => b.setAttribute("aria-pressed", b.dataset.cat === activeCat));
+  applyFilter();
+}
+const search = document.getElementById("search");
+search.addEventListener("input", applyFilter);
+search.addEventListener("keydown", ev => {
+  if (ev.key === "Enter") {
+    const hit = ELEMENTS.find(e => matches(e, search.value.trim().toLowerCase()));
+    if (hit) openElement(hit);
+  }
+});
+function matches(e, q) {
+  if (!q) return true;
+  return e.name.toLowerCase().includes(q) || e.sym.toLowerCase() === q || String(e.z) === q;
+}
+function applyFilter() {
+  const q = search.value.trim().toLowerCase();
+  for (const e of ELEMENTS) {
+    const t = tiles.get(e.z);
+    const ok = matches(e, q) && (!activeCat || e.cat === activeCat);
+    t.classList.toggle("dim", !ok);
+    t.classList.toggle("hit", !!q && ok);
+  }
+}
+
+const app = document.getElementById("app");
+const tempIn = document.getElementById("temp"), tempVal = document.getElementById("tempVal");
+const stateBtn = document.getElementById("stateToggle");
+function updateTemp() {
+  const T = +tempIn.value;
+  tempVal.textContent = `${fmt(T, 0)} K = ${fmt(T - 273.15, 2)} °C`;
+  for (const e of ELEMENTS) {
+    const s = stateAt(e, T), t = tiles.get(e.z);
+    t.style.setProperty("--sbg", STATE_VAR[s]);
+    t.style.setProperty("--sdot", STATE_VAR[s]);
+    t.title = `${e.name}: bei ${fmt(T - 273.15, 0)} °C ${STATE_DE[s]}`;
+  }
+}
+tempIn.addEventListener("input", () => { if (!app.classList.contains("state-mode")) setStateMode(true); updateTemp(); });
+function setStateMode(on) {
+  app.classList.toggle("state-mode", on);
+  stateBtn.setAttribute("aria-pressed", on);
+}
+stateBtn.addEventListener("click", () => setStateMode(!app.classList.contains("state-mode")));
+
+/* =========================================================
+   9. Theme hell/dunkel
+   ========================================================= */
+const themeBtn = document.getElementById("themeToggle");
+function setTheme(t) {
+  document.documentElement.dataset.theme = t;
+  themeBtn.textContent = t === "dark" ? "☀️ Hell" : "🌙 Dunkel";
+  try { localStorage.setItem("pse-theme", t); } catch (_) {}
+}
+themeBtn.addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
+
+/* =========================================================
+   10. Atommodelle
+   ========================================================= */
+function bohrSVG(e) {
+  const sh = shellsOf(e.z);
+  const size = 340, c = size / 2, r0 = 30, step = (c - r0 - 12) / sh.length;
+  let s = `<svg viewBox="${-c} ${-c} ${size} ${size}" role="img" aria-label="Bohrsches Atommodell von ${e.name}">`;
+  sh.forEach((n, i) => {
+    const r = r0 + step * (i + 1);
+    s += `<circle class="shell-ring" r="${r}"/>`;
+    const dur = 6 + i * 4, dir = i % 2 ? "reverse" : "normal";
+    s += `<g class="orbit" style="animation-duration:${dur}s;animation-direction:${dir}">`;
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2;
+      s += `<circle class="electron" r="${n > 18 ? 2.6 : 3.6}" cx="${(Math.cos(a) * r).toFixed(2)}" cy="${(Math.sin(a) * r).toFixed(2)}"/>`;
+    }
+    s += `</g>`;
+  });
+  s += `<circle class="nucleus" r="${r0 - 4}"/>`;
+  s += `<text class="nucleus-txt" text-anchor="middle" dy="-2" font-size="16">${e.sym}</text>`;
+  s += `<text class="nucleus-txt" text-anchor="middle" dy="13" font-size="9">${e.z} p⁺</text>`;
+  return s + `</svg>`;
+}
+function orbitalHTML(e) {
+  const occ = configOf(e.z);
+  const boxesPer = { s: 1, p: 3, d: 5, f: 7 };
+  // Energieordnung (Madelung), unten = niedrigste Energie
+  let h = `<div class="orb-wrap"><div class="orbitals">`;
+  for (const o of ORDER) {
+    if (!occ[o]) continue;
+    const nb = boxesPer[o[1]], n = occ[o];
+    const boxes = [];
+    for (let b = 0; b < nb; b++) {
+      // Hundsche Regel: erst jedes Kästchen einfach, dann doppelt besetzen
+      const up = n > b, down = n > nb + b;
+      boxes.push(`<div class="orb-box">${up ? "↑" : ""}${down ? "↓" : ""}</div>`);
+    }
+    h += `<div class="orb-row"><span class="lbl">${o}</span><div class="orb-boxes">${boxes.join("")}</div></div>`;
+  }
+  return h + `</div><div class="orb-legend">Unten: niedrigste Energie · Hundsche Regel &amp; Pauli-Prinzip</div></div>`;
+}
+
+/* =========================================================
+   11. Detailkarte öffnen / schließen
+   ========================================================= */
+const overlay = document.getElementById("overlay");
+const card = document.getElementById("card");
+const cardFront = document.getElementById("cardFront");
+const cardBack = document.getElementById("cardBack");
+let current = null, modelMode = "bohr", openTimer = null, lastFocus = null;
+
+function renderBack(e) {
+  const T = 293.15;
+  const groupTxt = e.f ? `${e.period} (${e.cat === "la" ? "Lanthanoid" : "Actinoid"})` : e.group;
+  const block = (() => { const occ = configOf(e.z); let last = null; for (const o of ORDER) if (occ[o]) last = o; return last ? last[1] : "s"; })();
+  cardBack.innerHTML = `
+    <div class="card-head">
+      <div class="chip"><small>${e.z}</small><b>${e.sym}</b><small>${typeof e.mass === "number" ? fmt(e.mass, 3) : e.mass}</small></div>
+      <div>
+        <h2 id="cardTitle">${e.name}</h2>
+        <div class="sub">${CATS[e.cat]} · Gruppe ${e.f ? "–" : e.group} · Periode ${e.period} · ${block}-Block</div>
+      </div>
+      <div class="card-nav">
+        <button class="btn" type="button" data-nav="-1" title="Vorheriges Element" aria-label="Vorheriges Element">‹</button>
+        <button class="btn" type="button" data-nav="1" title="Nächstes Element" aria-label="Nächstes Element">›</button>
+      </div>
+      <button class="card-close" type="button" aria-label="Schließen" title="Schließen (Esc)">✕</button>
+    </div>
+    <div class="card-body">
+      <div class="model-box">
+        <div class="model-switch">
+          <button class="btn" type="button" data-model="bohr" aria-pressed="${modelMode === "bohr"}">Bohr-Modell</button>
+          <button class="btn" type="button" data-model="orb" aria-pressed="${modelMode === "orb"}">Orbitalschema</button>
+        </div>
+        <div class="model-view" id="modelView"></div>
+        <div class="config">${configString(e.z)}</div>
+        <div class="shells-txt">Elektronen pro Schale: ${shellsOf(e.z).map((n, i) => "KLMNOPQ"[i] + " " + n).join(" · ")}</div>
+      </div>
+      <dl class="facts">
+        <dt>Ordnungszahl</dt><dd>${e.z}</dd>
+        <dt>Atommasse</dt><dd>${massTxt(e)}</dd>
+        <dt>Schmelzpunkt</dt><dd>${e.extra.sub ? "– (sublimiert)" : fmtTemp(e.mp)}</dd>
+        <dt>Siedepunkt</dt><dd>${e.extra.sub ? "– (sublimiert)" : fmtTemp(e.bp)}</dd>
+        <dt>Zustand bei 20 °C</dt><dd>${STATE_DE[stateAt(e, T)]}</dd>
+        <dt>Elektronegativität</dt><dd>${e.en != null ? fmt(e.en, 2) : "–"}</dd>
+        <dt>Entdecker</dt><dd>${e.disc}</dd>
+        <dt>Entdeckung</dt><dd>${e.year}</dd>
+        ${e.extra.note ? `<div class="note">ℹ️ ${e.extra.note}</div>` : ""}
+      </dl>
+      <div class="compounds">
+        <h3>Wichtige Verbindungen</h3>
+        <ul>${e.comps.map(c => `<li>${c}</li>`).join("")}</ul>
+      </div>
+    </div>`;
+  renderModel(e);
+  cardBack.querySelector(".card-close").addEventListener("click", closeElement);
+  cardBack.querySelectorAll("[data-model]").forEach(b => b.addEventListener("click", () => {
+    modelMode = b.dataset.model;
+    cardBack.querySelectorAll("[data-model]").forEach(x => x.setAttribute("aria-pressed", x === b));
+    renderModel(e);
+  }));
+  cardBack.querySelectorAll("[data-nav]").forEach(b => b.addEventListener("click", () => {
+    const z = ((e.z - 1 + +b.dataset.nav + 118) % 118) + 1;
+    switchTo(ELEMENTS[z - 1]);
+  }));
+}
+function renderModel(e) {
+  const v = cardBack.querySelector("#modelView");
+  v.innerHTML = modelMode === "bohr" ? bohrSVG(e) : orbitalHTML(e);
+}
+function setCardColor(e) { card.style.setProperty("--cat", `var(--c-${e.cat})`); }
+
+function openElement(e) {
+  lastFocus = document.activeElement;
+  if (current) tiles.get(current.z).classList.remove("flipped");
+  current = e;
+  tiles.get(e.z).classList.add("flipped");     // kleine Kachel dreht sich um
+  setCardColor(e);
+  cardFront.innerHTML = `<div class="big-z">${e.z}</div><div class="big-sym">${e.sym}</div><div class="big-name">${e.name}</div>`;
+  renderBack(e);
+  card.classList.remove("flipped");
+  overlay.classList.add("open");
+  overlay.setAttribute("aria-hidden", "false");
+  clearTimeout(openTimer);
+  openTimer = setTimeout(() => {               // große Karte dreht sich auf die Rückseite
+    card.classList.add("flipped");
+    const c = cardBack.querySelector(".card-close"); if (c) c.focus({ preventScroll: true });
+  }, 380);
+}
+function switchTo(e) {
+  tiles.get(current.z).classList.remove("flipped");
+  current = e;
+  tiles.get(e.z).classList.add("flipped");
+  setCardColor(e);
+  cardFront.innerHTML = `<div class="big-z">${e.z}</div><div class="big-sym">${e.sym}</div><div class="big-name">${e.name}</div>`;
+  renderBack(e);
+}
+function closeElement() {
+  if (!current) return;
+  clearTimeout(openTimer);
+  card.classList.remove("flipped");
+  const t = tiles.get(current.z);
+  setTimeout(() => {
+    overlay.classList.remove("open");
+    overlay.setAttribute("aria-hidden", "true");
+    t.classList.remove("flipped");
+    if (lastFocus) lastFocus.focus({ preventScroll: true });
+  }, 450);
+  current = null;
+}
+overlay.addEventListener("click", ev => { if (ev.target === overlay) closeElement(); });
+document.addEventListener("keydown", ev => {
+  if (!current) return;
+  if (ev.key === "Escape") closeElement();
+  if (ev.key === "ArrowRight") switchTo(ELEMENTS[current.z % 118]);
+  if (ev.key === "ArrowLeft") switchTo(ELEMENTS[(current.z + 116) % 118]);
+});
+
+/* =========================================================
+   12. Start
+   ========================================================= */
+build();
+let savedTheme = null;
+try { savedTheme = localStorage.getItem("pse-theme"); } catch (_) {}
+const urlTheme = new URLSearchParams(location.search).get("theme");
+setTheme(urlTheme || savedTheme || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"));
+updateTemp();
+</script>
+</body>
+</html>
